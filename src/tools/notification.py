@@ -21,7 +21,7 @@ def send_booking_notification(email: str, date: str, time: str) -> dict:
             "message": "Notification sent successfully.",
             "data": payload
         }
-    except requests.RequestException as e:
+    except requests.RequestException as exc:
         return {
             "success": False,
             "message": str(e),
