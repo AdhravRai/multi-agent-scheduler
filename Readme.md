@@ -358,15 +358,15 @@ Hello! How can I help you schedule an appointment today?
 
 ## Greeting
 
-![HOME](screenshots/Home.png)
+![HOME](assets/screenshots/Home.png)
 
 ## Multi-turn Booking
 
-![Booking](screenshots/booking.png)
+![Booking](assets/screenshots/booking.png)
 
 ## Slot Unavailable
 
-![Unavailable](screenshots/unavailable.png)
+![Unavailable](assets/screenshots/unavailable.png)
 # 🔮 Future Improvements
 
 - Google Calendar Integration
