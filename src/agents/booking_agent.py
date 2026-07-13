@@ -1,8 +1,8 @@
-import json
-from langchain_core.messages import HumanMessage, SystemMessage
-from src.utils.llm import llm
+import re
+
+from dateparser.search import search_dates
+
 from src.graph.state import SchedulerState
-from src.prompts.booking_prompt import BOOKING_PROMPT
 from src.tools.calendar_tools import check_availability, reserve_slot
 from src.tools.notification import send_booking_notification
 from src.tools.validator import (
@@ -11,99 +11,173 @@ from src.tools.validator import (
     is_valid_email,
 )
 
+
 class BookingAgent:
-    def __init__(self):
-        self.llm = llm
-    def _extract_details(self, user_input: str) -> dict:
-        response = self.llm.invoke(
-            [
-                SystemMessage(content=BOOKING_PROMPT),
-                HumanMessage(content=user_input),
-            ]
+
+    def _extract_email(self, text: str):
+        match = re.search(
+            r"[\w\.-]+@[\w\.-]+\.\w+",
+            text,
         )
-        try:
-            return json.loads(response.content)
-        except json.JSONDecodeError:
-            return {
-                "date": "",
-                "time": "",
-                "email": "",
-            }
-    def _validate_details(self, details: dict):
-        details["date"] = normalize_date(details["date"])
-        details["time"] = normalize_time(details["time"])
+
+        if match:
+            return match.group()
+
+        return None
+
+    def _extract_date_time(self, text: str):
+
+        date = None
+        time = None
+
+        matches = search_dates(
+            text,
+            settings={
+                "PREFER_DATES_FROM": "future",
+            },
+        )
+
+        if not matches:
+            return date, time
+
+        for _, parsed in matches:
+
+            if date is None:
+                date = parsed.strftime("%Y-%m-%d")
+
+            if (
+                parsed.hour != 0
+                or parsed.minute != 0
+            ):
+                time = parsed.strftime("%H:%M")
+
+        return date, time
+
+    def _extract_details(self, state: SchedulerState):
+
+        details = {
+            "date": state.get("date") or "",
+            "time": state.get("time") or "",
+            "email": state.get("email") or "",
+        }
+
+        text = state["user_input"].strip()
+
+        extracted_date, extracted_time = self._extract_date_time(text)
+
+        extracted_email = self._extract_email(text)
+
+        if extracted_date:
+            details["date"] = extracted_date
+
+        if extracted_time:
+            details["time"] = extracted_time
+
+        if extracted_email:
+            details["email"] = extracted_email
+
+        return details
+
+    def _validate_details(self, details):
+
+        if details["date"]:
+            details["date"] = normalize_date(details["date"])
+
+        if details["time"]:
+            details["time"] = normalize_time(details["time"])
+
         missing_fields = []
+
         if not details["date"]:
             missing_fields.append("date")
+
         if not details["time"]:
             missing_fields.append("time")
-        email = details["email"]
-        if not email or not is_valid_email(email):
+
+        if not is_valid_email(details["email"]):
             missing_fields.append("email")
+
         return details, missing_fields
+
     def process(self, state: SchedulerState):
-        details = self._extract_details(state["user_input"])
+
+        details = self._extract_details(state)
+
         details, missing_fields = self._validate_details(details)
 
-        date = details["date"]
-        time = details["time"]
-        email = details["email"]
-
-        state["date"] = date
-        state["time"] = time
-        state["email"] = email
+        state["date"] = details["date"]
+        state["time"] = details["time"]
+        state["email"] = details["email"]
         state["missing_fields"] = missing_fields
+
         if missing_fields:
+
             state["booking_status"] = "pending"
+
             state["response"] = (
                 f"Please provide the following: {', '.join(missing_fields)}."
             )
+
             return state
+
         available = check_availability.invoke(
             {
-                "date": date,
-                "time": time,
+                "date": details["date"],
+                "time": details["time"],
             }
         )
+
         if not available:
+
             state["booking_status"] = "unavailable"
+
             state["response"] = (
-                f"The requested slot on {date} at {time} is already booked.\n\n"
-                "Would you like to choose another time or a different date?"
+                f"The slot on {details['date']} at {details['time']} is already booked.\n\n"
+                "Would you like another time or date?"
             )
+
             return state
+
         reserved = reserve_slot.invoke(
             {
-                "date": date,
-                "time": time,
-                "email": email,
+                "date": details["date"],
+                "time": details["time"],
+                "email": details["email"],
             }
         )
+
         if not reserved:
+
             state["booking_status"] = "failed"
+
             state["response"] = (
-                "Something went wrong while reserving your appointment."
+                "Something went wrong while reserving the appointment."
             )
+
             return state
+
         notification = send_booking_notification.invoke(
             {
-                "email": email,
-                "date": date,
-                "time": time,
+                "email": details["email"],
+                "date": details["date"],
+                "time": details["time"],
             }
         )
-        if not notification["success"]:
-            state["booking_status"] = "confirmed"
-            state["response"] = (
-                "Your appointment has been booked successfully, "
-                "but the confirmation notification could not be sent."
-            )
-            return state
 
         state["booking_status"] = "confirmed"
-        state["response"] = (
-            f"Your appointment has been booked for {date} at {time}."
-        )
+
+        if notification["success"]:
+
+            state["response"] = (
+                f"Your appointment has been booked for "
+                f"{details['date']} at {details['time']}."
+            )
+
+        else:
+
+            state["response"] = (
+                "Your appointment was booked successfully, "
+                "but the notification could not be sent."
+            )
 
         return state
-        

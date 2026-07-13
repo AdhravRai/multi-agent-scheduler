@@ -1,13 +1,11 @@
 import sqlite3
 from src.config.settings import DATABASE_PATH
-
 class DatabaseManager:
     def __init__(self):
         self.db_path = DATABASE_PATH
         self.initialize_database()
     def get_connection(self):
         return sqlite3.connect(self.db_path)
-
     def initialize_database(self):
         conn = self.get_connection()
         cursor = conn.cursor()

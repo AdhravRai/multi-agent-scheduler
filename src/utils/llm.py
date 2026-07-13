@@ -1,5 +1,4 @@
 from langchain_groq import ChatGroq
-
 from src.config.settings import GROQ_API_KEY, MODEL_NAME
 
 llm = ChatGroq(

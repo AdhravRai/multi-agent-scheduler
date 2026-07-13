@@ -1,7 +1,5 @@
 from langchain_core.tools import tool
-
 from src.database.database import db
-
 
 @tool
 def check_availability(date: str, time: str) -> bool:

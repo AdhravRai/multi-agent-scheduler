@@ -6,8 +6,10 @@ from langchain_core.messages import HumanMessage,SystemMessage
 class TriageAgent:
     def __init__(self):
         self.llm = llm
-
     def process(self, state: SchedulerState):
+        if state.get("booking_status") == "pending":
+            state["intent"] = "booking"
+            return state
         user_input = state["user_input"]
         response = self.llm.invoke(
             [
