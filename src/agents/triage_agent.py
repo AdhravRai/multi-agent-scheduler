@@ -1,4 +1,4 @@
-from src.config.llm import llm
+from src.utils.llm import llm
 from src.graph.state import SchedulerState
 from src.prompts.triage_prompt import TRIAGE_PROMPT
 from langchain_core.messages import HumanMessage,SystemMessage

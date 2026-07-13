@@ -4,6 +4,7 @@ from src.config.settings import WEBHOOK_URL
 
 @tool
 def send_booking_notification(email: str, date: str, time: str) -> dict:
+    """Send a mock booking confirmation notification."""
     payload = {
         "email": email,
         "date": date,
@@ -24,6 +25,6 @@ def send_booking_notification(email: str, date: str, time: str) -> dict:
     except requests.RequestException as exc:
         return {
             "success": False,
-            "message": str(e),
+            "message": str(exc),
             "data": None
         }

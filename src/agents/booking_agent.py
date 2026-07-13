@@ -1,6 +1,6 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
-from src.config.llm import llm
+from src.utils.llm import llm
 from src.graph.state import SchedulerState
 from src.prompts.booking_prompt import BOOKING_PROMPT
 from src.tools.calendar_tools import check_availability, reserve_slot
@@ -35,7 +35,6 @@ class BookingAgent:
         missing_fields = []
         if not details["date"]:
             missing_fields.append("date")
-
         if not details["time"]:
             missing_fields.append("time")
         email = details["email"]
@@ -45,44 +44,66 @@ class BookingAgent:
     def process(self, state: SchedulerState):
         details = self._extract_details(state["user_input"])
         details, missing_fields = self._validate_details(details)
-        state["date"] = details["date"]
-        state["time"] = details["time"]
-        state["email"] = details["email"]
+
+        date = details["date"]
+        time = details["time"]
+        email = details["email"]
+
+        state["date"] = date
+        state["time"] = time
+        state["email"] = email
         state["missing_fields"] = missing_fields
         if missing_fields:
+            state["booking_status"] = "pending"
             state["response"] = (
                 f"Please provide the following: {', '.join(missing_fields)}."
             )
             return state
-        available = check_availability(
-            details["date"],
-            details["time"],
+        available = check_availability.invoke(
+            {
+                "date": date,
+                "time": time,
+            }
         )
         if not available:
             state["booking_status"] = "unavailable"
             state["response"] = (
-               """The requested slot is already booked.
-
-             Would you like to try a different time on the same day or choose another date?"""
+                f"The requested slot on {date} at {time} is already booked.\n\n"
+                "Would you like to choose another time or a different date?"
             )
             return state
-        reserve_slot(
-            details["date"],
-            details["time"],
-            details["email"],
+        reserved = reserve_slot.invoke(
+            {
+                "date": date,
+                "time": time,
+                "email": email,
+            }
         )
-        if not reserved :
+        if not reserved:
             state["booking_status"] = "failed"
+            state["response"] = (
+                "Something went wrong while reserving your appointment."
+            )
             return state
-        send_booking_notification(
-            details["email"],
-            details["date"],
-            details["time"],
+        notification = send_booking_notification.invoke(
+            {
+                "email": email,
+                "date": date,
+                "time": time,
+            }
         )
+        if not notification["success"]:
+            state["booking_status"] = "confirmed"
+            state["response"] = (
+                "Your appointment has been booked successfully, "
+                "but the confirmation notification could not be sent."
+            )
+            return state
+
         state["booking_status"] = "confirmed"
         state["response"] = (
-            f"Your appointment has been booked for "
-            f"{details['date']} at {details['time']}."
+            f"Your appointment has been booked for {date} at {time}."
         )
 
         return state
+        
